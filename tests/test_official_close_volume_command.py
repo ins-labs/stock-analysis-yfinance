@@ -87,11 +87,12 @@ class OfficialCommandTests(unittest.TestCase):
         with patch.object(command, 'OFFICIAL_PRIVATE_COMMAND_ENABLED', True), patch.dict(os.environ, {'GITHUB_ACTIONS': 'false'}):
             return command.run_private(policy, output, policy_evidence_bytes=evidence, opener=opener)
 
-    def test_default_disabled_before_network_or_output_creation(self):
+    def test_explicit_disabled_fallback_before_network_or_output_creation(self):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp) / 'private'
             opener = self.opener()
-            result = command.run_private(self.policy(), target, policy_evidence_bytes=EVIDENCE, opener=opener)
+            with patch.object(command, 'OFFICIAL_PRIVATE_COMMAND_ENABLED', False):
+                result = command.run_private(self.policy(), target, policy_evidence_bytes=EVIDENCE, opener=opener)
             self.assertEqual(result, {'rc': 2, 'status': 'DISABLED_NO_REQUEST'})
             self.assertEqual(opener.requests, [])
             self.assertFalse(target.exists())
@@ -257,9 +258,9 @@ class OfficialCommandTests(unittest.TestCase):
         self.assertEqual(self.enabled(self.policy(), 'relative-output', opener)['rc'], 1)
         self.assertEqual(opener.requests, [])
 
-    def test_cli_disabled_does_not_read_nonexistent_policy_or_print_private_arguments(self):
+    def test_explicit_disabled_cli_does_not_read_nonexistent_policy_or_print_private_arguments(self):
         stream = io.StringIO()
-        with contextlib.redirect_stdout(stream):
+        with patch.object(command, 'OFFICIAL_PRIVATE_COMMAND_ENABLED', False), contextlib.redirect_stdout(stream):
             rc = command.main(['--policy-file', '/nonexistent-policy', '--policy-evidence-file', '/nonexistent-evidence',
                                '--private-output-directory', '/unused-private'])
         self.assertEqual(rc, 2)
@@ -367,6 +368,49 @@ class OfficialCommandTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), 'PRIVATE_INPUT_REFUSED\n')
             self.assertEqual(stderr.getvalue(), '')
             self.assertNotIn(sentinel, stdout.getvalue() + stderr.getvalue())
+
+    def test_enabled_default_cli_reads_private_policy_and_runs_exact_two_mock_gets(self):
+        self.assertIs(command.OFFICIAL_PRIVATE_COMMAND_ENABLED, True)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            policy = root / 'caller-policy.private.json'
+            evidence = root / 'evidence.private'
+            policy.write_text(json.dumps(self.policy()))
+            evidence.write_bytes(EVIDENCE)
+            output = root / 'private-result'
+            opener = self.opener()
+            stdout, stderr = io.StringIO(), io.StringIO()
+            with patch.dict(os.environ, {'GITHUB_ACTIONS': 'false'}), \
+                    patch.object(command, 'build_opener', return_value=opener), \
+                    contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                rc = command.main(['--policy-file', str(policy), '--policy-evidence-file', str(evidence),
+                                   '--private-output-directory', str(output)])
+            self.assertEqual(rc, 0)
+            self.assertEqual(len(opener.requests), 2)
+            self.assertEqual(stdout.getvalue(), 'PRIVATE_STRUCTURAL_ASSESSMENT_ONLY\n')
+            self.assertEqual(stderr.getvalue(), '')
+            self.assertTrue((output / 'manifest.private.json').exists())
+            report = json.loads((output / 'assessment.private.json').read_bytes())
+            self.assertEqual(report['row_count'], 2)
+            self.assertFalse(report['current_quote_usable'])
+
+    def test_enabled_default_cli_actions_refuses_before_inputs_and_network(self):
+        self.assertIs(command.OFFICIAL_PRIVATE_COMMAND_ENABLED, True)
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}), \
+                patch.object(command.Path, 'read_bytes', side_effect=AssertionError('no input read')), \
+                patch.object(command, 'build_opener', side_effect=AssertionError('no request')), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            rc = command.main(['--private-sentinel=not-echoed'])
+        self.assertEqual(rc, 2)
+        self.assertEqual(stdout.getvalue(), 'PUBLIC_ACTIONS_VENUE_REFUSED_NO_REQUEST\n')
+        self.assertEqual(stderr.getvalue(), '')
+
+    def test_enabled_default_cli_does_not_expand_public_persistent_dispatcher(self):
+        self.assertIs(command.OFFICIAL_PRIVATE_COMMAND_ENABLED, True)
+        with self.assertRaises(ValueError):
+            parse_command('python official_close_volume_command.py --policy-file private.json')
+        self.assertTrue(parse_command('python fixture_demo.py'))
 
 
 if __name__ == '__main__':

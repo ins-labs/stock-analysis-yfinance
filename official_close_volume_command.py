@@ -1,8 +1,8 @@
-"""Disabled private official EGX historical close-volume command proposal.
+"""Private official EGX historical close-volume command.
 
 The public persistent dispatcher remains fixture-only. This module never prints
-market rows, receipts, symbols, URLs, exceptions or descriptive metrics. Enabling
-it is a separate reviewed source change and private-venue decision, not a flag.
+market rows, receipts, symbols, URLs, exceptions or descriptive metrics. It remains excluded
+from the public dispatcher; private venue and caller policy need grounded scope.
 """
 import argparse
 from datetime import date, datetime, timezone
@@ -20,7 +20,7 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 from egx_close_volume_admission import assess_egx_close_volume
 
 
-OFFICIAL_PRIVATE_COMMAND_ENABLED = False
+OFFICIAL_PRIVATE_COMMAND_ENABLED = True
 MAX_RESPONSE_BYTES = 5_000_000
 BASE = 'https://beta.egx.com.eg/api/bff/egx/'
 POLICY_KEYS = {'requested_isin', 'requested_symbol', 'requested_days',
@@ -97,7 +97,7 @@ def get_original(opener, endpoint):
 
 
 def run_private(policy, output_directory, *, policy_evidence_bytes, opener=None):
-    """Private service entry, disabled until a separately reviewed enablement.
+    """Private service entry, excluded from public Actions and the fixture dispatcher.
 
     The caller must independently ground the evidence's authorship, audience and
     policy scope. A digest match is custody only, never a new grant or factor.
@@ -183,7 +183,7 @@ def main(argv=None):
     if os.environ.get('GITHUB_ACTIONS', '').lower() == 'true':
         print('PUBLIC_ACTIONS_VENUE_REFUSED_NO_REQUEST')
         return 2
-    parser = PrivateArgumentParser(description='Disabled private historical close-volume command')
+    parser = PrivateArgumentParser(description='Private historical close-volume command')
     parser.add_argument('--policy-file', required=True)
     parser.add_argument('--policy-evidence-file', required=True)
     parser.add_argument('--private-output-directory', required=True)
