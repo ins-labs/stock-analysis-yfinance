@@ -6,7 +6,7 @@ The enabled command is `python fixture_demo.py`. It uses invented data and makes
 
 1. Set the persistent repository Actions variable `ANALYSIS_COMMAND` to `python fixture_demo.py`.
 2. Open Actions > Public stock analysis > Run workflow and select an accepted branch.
-3. Check the original job conclusion and labeled synthetic output. There are no automatic push, pull-request or scheduled runs, dispatch-input overrides, uploaded artifacts or raw market-data exports.
+3. Check the original job conclusion and labeled synthetic output. Pull requests to main run the deterministic tests automatically, but do not execute the persistent command. There are no automatic push or scheduled runs, dispatch-input overrides, uploaded artifacts or raw market-data exports.
 
 Commands and synthetic results appear in public job logs. Do not supply credentials, private holdings or other private inputs. The fixture and demo code are CC0-1.0 and print `SYNTHETIC_FIXTURE_ONLY` with `real_market_data:false`.
 
@@ -40,6 +40,12 @@ Relevant sources for that unresolved review:
 - https://github.com/ranaroussi/yfinance
 - https://raw.githubusercontent.com/ranaroussi/yfinance/e2f6104164b70085556fe2f8e194cf3ca18550f5/LICENSE.txt
 - https://raw.githubusercontent.com/ranaroussi/yfinance/e2f6104164b70085556fe2f8e194cf3ca18550f5/yfinance/scrapers/history.py
+
+## Pull-request test gate
+
+Pull requests to main run the same `analyze` job on `opened`, `synchronize` and `reopened` events. The job installs the pinned dependencies and runs `python -m unittest discover -s tests -v`. It does not execute the persistent repository command on these events. That command, and its `ANALYSIS_COMMAND` binding, are present only in the manual `workflow_dispatch` step. These changed workflow bytes are UNRUN; the earlier manual 24-test result does not qualify this event path.
+
+The pull-request job has contents-read permission only. Checkout does not persist credentials. No repository secrets, write token, environments, caches, artifacts or self-hosted runner are used. The event is `pull_request`, never `pull_request_target`. Pull-request source is untrusted code executed for tests on a standard hosted runner, not privileged code. It is not a general provider-network sandbox: future changed tests or dependencies could make requests, so the reviewed fake-provider-only tests and the no-real-data policy still matter. No guarantee of network isolation is made.
 
 ## Execution boundaries
 
